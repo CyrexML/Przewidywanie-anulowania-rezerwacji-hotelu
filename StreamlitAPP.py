@@ -132,7 +132,7 @@ elif section == "Modelowanie":
     xgb_accuracy = accuracy_score(y_test, y_pred_xgb)
     accuracies.append(xgb_accuracy)
 
-    # Ocena modelu TensorFlow
+
     tf_loss, tf_accuracy = model_tf.evaluate(X_test_scaled, y_test, verbose=0)
     accuracies.append(tf_accuracy)
 
@@ -152,13 +152,13 @@ elif section == "Modelowanie":
         plt.figure(figsize=(8, 6))
         plt.plot(fpr_lr, tpr_lr, label=f'Regresja Logistyczna (AUC = {roc_auc_lr:.2f})', color='blue')
 
-        # XGBoost
+
         y_prob_xgb = model_xgb.predict_proba(X_test_scaled)[:, 1]
         fpr_xgb, tpr_xgb, _ = roc_curve(y_test, y_prob_xgb)
         roc_auc_xgb = auc(fpr_xgb, tpr_xgb)
         plt.plot(fpr_xgb, tpr_xgb, label=f'XGBoost (AUC = {roc_auc_xgb:.2f})', color='orange')
 
-        # Model TensorFlow
+
         y_prob_tf = model_tf.predict_proba(X_test_scaled)[:, 1]  # Используйте predict_proba для получения вероятностей
         fpr_tf, tpr_tf, _ = roc_curve(y_test, y_prob_tf)
         roc_auc_tf = auc(fpr_tf, tpr_tf)
@@ -317,3 +317,7 @@ if section == "Predykcja":
         st.write("**Sieć neuronowa TensorFlow**")
         st.write(f"Predykcja: {'Anulowano' if prediction_tf[0] == 1 else 'Nie anulowano'}")
         st.write(f"Prawdopodobieństwo anulacji: {probability_tf[0]:.4f}")
+
+        ## Uruchomienie aplikacji
+        # 1.tf_env\Scripts\activate
+        # 2.streamlit run StreamlitAPP.py
