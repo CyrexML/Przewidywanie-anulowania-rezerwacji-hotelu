@@ -1,73 +1,318 @@
 import streamlit as st
 import pandas as pd
-import joblib
-import tensorflow as tf
+import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
-
-# Загрузка данных
-data_path = "D:/Projektiki/predykcja_rezerwacji/hotel_booking.csv"
-df = pd.read_csv(data_path)
-
-# Загрузка моделей
-lr_model = joblib.load("D:/Projektiki/predykcja_rezerwacji/logistic_regression_model.pkl")
-xgb_model = joblib.load("D:/Projektiki/predykcja_rezerwacji/xgboost_model.pkl")
-tf_model = tf.keras.models.load_model("D:/Projektiki/predykcja_rezerwacji/tf_model.h5")
+from sklearn.metrics import classification_report, accuracy_score, confusion_matrix, roc_curve, auc
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
+import joblib
+import tensorflow
+from tensorflow import keras
 
 
-# Функция для предсказания
-def make_predictions(input_data):
-    # Здесь может быть код для масштабирования данных (scaler)
-    # X_scaled = scaler.transform(input_data)
 
-    y_pred_lr = lr_model.predict(input_data)
-    y_pred_xgb = xgb_model.predict(input_data)
-    y_pred_tf = (tf_model.predict(input_data) > 0.5).astype(int)
+data_path_raw = "D:/Projektiki/predykcja_rezerwacji/hotel_booking.csv"
+data_path_cleaned = "D:/Projektiki/predykcja_rezerwacji/hotel_booking1.csv"
 
-    return y_pred_lr, y_pred_xgb, y_pred_tf
+df_raw = pd.read_csv(data_path_raw)
+df_cleaned = pd.read_csv(data_path_cleaned)
 
 
-# Интерфейс Streamlit
-st.title("Анализ и Предсказание Отмены Бронирования Отелей")
+X_train = pd.read_csv('D:/Projektiki/predykcja_rezerwacji/X_train.csv')
+X_test = pd.read_csv('D:/Projektiki/predykcja_rezerwacji/X_test.csv')
+X_train_scaled = pd.read_csv('D:/Projektiki/predykcja_rezerwacji/X_train_scaled.csv')
+X_test_scaled = pd.read_csv('D:/Projektiki/predykcja_rezerwacji/X_test_scaled.csv')
+y_train = pd.read_csv('D:/Projektiki/predykcja_rezerwacji/y_train.csv')['is_canceled']
+y_test = pd.read_csv('D:/Projektiki/predykcja_rezerwacji/y_test.csv')['is_canceled']
+scaler_path = 'D:/Projektiki/predykcja_rezerwacji/scaler.pkl'
+scaler = joblib.load(scaler_path)
 
-st.sidebar.header("Настройки")
-section = st.sidebar.selectbox("Выберите раздел", ["EDA", "Предсказание"])
+# Załaduj wcześniej zapisane modele
+lr_model_path = 'D:/Projektiki/predykcja_rezerwacji/logistic_regression_model.pkl'
+xgb_model_path = 'D:/Projektiki/predykcja_rezerwacji/best_model_xgb.pkl'
+nn_model_path = 'D:/Projektiki/predykcja_rezerwacji/tf_model.h5'
 
-if section == "EDA":
-    st.header("Анализ данных")
-    variable = st.selectbox("Выберите переменную для анализа", df.columns)
-    plot_type = st.selectbox("Тип графика", ["Гистограмма", "Boxplot", "Scatterplot"])
+model_lr = joblib.load(lr_model_path)
+model_xgb = joblib.load(xgb_model_path)
+model_tf = tensorflow.keras.models.load_model(nn_model_path)
 
-    if plot_type == "Гистограмма":
-        plt.figure(figsize=(10, 6))
-        sns.histplot(df[variable], bins=30)
+
+st.title("Analiza i Predykcja Anulacji Rezerwacji Hotelowych")
+
+
+st.sidebar.header("Ustawienia")
+section = st.sidebar.selectbox("Wybierz sekcję", ["Podstawowe informacje", "EDA", "Modelowanie", "Predykcja"])
+
+if section == "Podstawowe informacje":
+    st.header("Podstawowe informacje o zestawie danych")
+
+    st.subheader("Nieoczyszczony zestaw danych (hotel_booking)")
+    st.write(f"Rozmiar zestawu danych: {df_raw.shape[0]} wierszy, {df_raw.shape[1]} kolumn")
+    st.write("Przykładowe 5 wierszy zestawu danych:")
+    st.write(df_raw.head())
+    st.write("Opis danych:")
+    st.write(df_raw.describe())
+
+    st.subheader("Oczyszczony zestaw danych (hotel_booking1)")
+    st.write(f"Rozmiar zestawu danych: {df_cleaned.shape[0]} wierszy, {df_cleaned.shape[1]} kolumn")
+    st.write("Przykładowe 5 wierszy zestawu danych:")
+    st.write(df_cleaned.head())
+    st.write("Opis danych:")
+    st.write(df_cleaned.describe())
+
+    st.subheader("Macierz korelacji dla zestawu danych liczbowych")
+    numeric_cols = df_raw.select_dtypes(include=['number']).columns.tolist()
+    corr_matrix_raw = df_raw[numeric_cols].corr()
+    plt.figure(figsize=(12, 10))
+    sns.heatmap(corr_matrix_raw, annot=True, cmap="coolwarm", fmt=".2f", linewidths=0.5)
+    st.pyplot(plt)
+
+elif section == "EDA":
+    st.header("Analiza danych")
+    variable_x = st.selectbox("Wybierz zmienną X", df_cleaned.columns)
+    variable_y = st.selectbox("Wybierz zmienną Y", df_cleaned.columns)
+
+    plot_type = st.selectbox("Typ wykresu",
+                             ["Histogram zależności", "Wykres liniowy zależności", "Boxplot", "Scatterplot"])
+
+    use_is_canceled = st.checkbox("Użyj is_canceled do podziału danych")
+
+    if st.button("Wygeneruj"):
+        if plot_type == "Histogram zależności":
+            plt.figure(figsize=(10, 6))
+            if use_is_canceled:
+                sns.histplot(data=df_cleaned, x=variable_x, hue='is_canceled', multiple="stack", bins=30)
+            else:
+                sns.histplot(data=df_cleaned, x=variable_x, hue=variable_y, multiple="stack", bins=30)
+            plt.title(f"Histogram zależności {variable_x} od {variable_y if not use_is_canceled else 'is_canceled'}")
+            plt.xlabel(variable_x)
+            plt.ylabel("Częstość")
+            st.pyplot(plt)
+
+        elif plot_type == "Wykres liniowy zależności":
+            plt.figure(figsize=(10, 6))
+            if use_is_canceled:
+                sns.lineplot(x=df_cleaned[variable_x], y=df_cleaned[variable_y], hue=df_cleaned['is_canceled'])
+            else:
+                sns.lineplot(x=df_cleaned[variable_x], y=df_cleaned[variable_y])
+            plt.title(f"Wykres liniowy zależności {variable_y} od {variable_x}")
+            plt.xlabel(variable_x)
+            plt.ylabel(variable_y)
+            st.pyplot(plt)
+
+        elif plot_type == "Boxplot":
+            plt.figure(figsize=(10, 6))
+            sns.boxplot(x=df_cleaned[variable_x], y=df_cleaned[variable_y])
+            plt.title(f"Boxplot: {variable_y} w zależności od {variable_x}")
+            plt.xlabel(variable_x)
+            plt.ylabel(variable_y)
+            st.pyplot(plt)
+
+        elif plot_type == "Scatterplot":
+            plt.figure(figsize=(10, 6))
+            sns.scatterplot(x=df_cleaned[variable_x], y=df_cleaned[variable_y])
+            plt.title(f"Scatterplot: {variable_y} od {variable_x}")
+            plt.xlabel(variable_x)
+            plt.ylabel(variable_y)
+            st.pyplot(plt)
+
+elif section == "Modelowanie":
+    st.header("Porównanie modeli")
+
+    models = ['Regresja Logistyczna', 'XGBoost', 'Model TensorFlow']
+    accuracies = []
+
+    # Ocena dokładności modeli
+    y_pred_lr = model_lr.predict(X_test_scaled)
+    lr_accuracy = accuracy_score(y_test, y_pred_lr)
+    accuracies.append(lr_accuracy)
+
+    y_pred_xgb = model_xgb.predict(X_test_scaled)
+    xgb_accuracy = accuracy_score(y_test, y_pred_xgb)
+    accuracies.append(xgb_accuracy)
+
+    tf_loss, tf_accuracy = model_tf.evaluate(X_test_scaled, y_test, verbose=0)
+    accuracies.append(tf_accuracy)
+
+    st.write(f"Dokładność modelu TensorFlow: {tf_accuracy:.4f}")
+
+    # Wybór między krzywą ROC a wykresem porównania dokładności modeli
+    plot_choice = st.radio("Wybierz wykres", ("Krzywa ROC", "Wykres porównania dokładności modeli"))
+
+    if plot_choice == "Krzywa ROC":
+        # Wyświetlenie krzywej ROC
+        st.subheader("Porównanie krzywych ROC")
+
+        # Regresja Logistyczna
+        y_prob_lr = model_lr.predict_proba(X_test_scaled)[:, 1]
+        fpr_lr, tpr_lr, _ = roc_curve(y_test, y_prob_lr)
+        roc_auc_lr = auc(fpr_lr, tpr_lr)
+        plt.figure(figsize=(8, 6))
+        plt.plot(fpr_lr, tpr_lr, label=f'Regresja Logistyczna (AUC = {roc_auc_lr:.2f})', color='blue')
+
+        # XGBoost
+        y_prob_xgb = model_xgb.predict_proba(X_test_scaled)[:, 1]
+        fpr_xgb, tpr_xgb, _ = roc_curve(y_test, y_prob_xgb)
+        roc_auc_xgb = auc(fpr_xgb, tpr_xgb)
+        plt.plot(fpr_xgb, tpr_xgb, label=f'XGBoost (AUC = {roc_auc_xgb:.2f})', color='orange')
+
+        # Model TensorFlow
+        y_prob_tf = model_tf.predict(X_test_scaled).ravel()
+        fpr_tf, tpr_tf, _ = roc_curve(y_test, y_prob_tf)
+        roc_auc_tf = auc(fpr_tf, tpr_tf)
+        plt.plot(fpr_tf, tpr_tf, label=f'Model TensorFlow (AUC = {roc_auc_tf:.2f})', color='green')
+
+        plt.plot([0, 1], [0, 1], linestyle='--', color='grey', label='Losowy wybór')
+        plt.xlabel('False Positive Rate')
+        plt.ylabel('True Positive Rate')
+        plt.title('Krzywa ROC')
+        plt.legend()
         st.pyplot(plt)
-    elif plot_type == "Boxplot":
-        plt.figure(figsize=(10, 6))
-        sns.boxplot(x='is_canceled', y=variable, data=df)
+
+    elif plot_choice == "Wykres porównania dokładności modeli":
+        # Wyświetlenie wykresu porównania dokładności modeli
+        st.subheader("Wykres porównania dokładności modeli")
+
+        plt.figure(figsize=(10, 5))
+        plt.bar(models, accuracies, color=['blue', 'orange', 'green'])
+        plt.xlabel('Model')
+        plt.ylabel('Dokładność')
+        plt.title('Porównanie modeli')
+        plt.ylim(0, 1)
         st.pyplot(plt)
-    elif plot_type == "Scatterplot":
-        scatter_var = st.selectbox("Выберите вторую переменную для scatterplot", df.columns)
-        plt.figure(figsize=(10, 6))
-        sns.scatterplot(x=df[variable], y=df[scatter_var])
-        st.pyplot(plt)
 
-elif section == "Предсказание":
-    st.header("Предсказание отмены бронирования")
-    lead_time = st.number_input("Lead Time")
-    adr = st.number_input("ADR")
-    total_of_special_requests = st.number_input("Total of Special Requests")
+    # Wyświetlenie raportu klasyfikacji i macierzy pomyłek dla wybranego modelu
+    show_metrics = st.checkbox("Wyświetl metryki (Raport klasyfikacji i Macierz pomyłek)")
 
-    input_data = pd.DataFrame([[lead_time, adr, total_of_special_requests]],
-                              columns=["lead_time", "adr", "total_of_special_requests"])
+    if show_metrics:
+        model_choice = st.selectbox("Wybierz model", models)
 
-    if st.button("Предсказать"):
-        y_pred_lr, y_pred_xgb, y_pred_tf = make_predictions(input_data)
+        if model_choice == 'Regresja Logistyczna':
+            st.subheader("Raport klasyfikacji (Regresja Logistyczna)")
+            classification_rep_lr = classification_report(y_test, y_pred_lr)
+            st.text_area("Raport klasyfikacji", value=classification_rep_lr, height=200)
 
-        st.write("Предсказания:")
-        st.write(f"Логистическая регрессия: {y_pred_lr[0]}")
-        st.write(f"XGBoost: {y_pred_xgb[0]}")
-        st.write(f"Нейронная сеть: {y_pred_tf[0][0]}")
+            st.subheader("Macierz pomyłek (Regresja Logistyczna)")
+            cm_lr = confusion_matrix(y_test, y_pred_lr)
+            st.write(cm_lr)
 
+        elif model_choice == 'XGBoost':
+            st.subheader("Raport klasyfikacji (XGBoost)")
+            classification_rep_xgb = classification_report(y_test, y_pred_xgb)
+            st.text_area("Raport klasyfikacji", value=classification_rep_xgb, height=200)
 
+            st.subheader("Macierz pomyłek (XGBoost)")
+            cm_xgb = confusion_matrix(y_test, y_pred_xgb)
+            st.write(cm_xgb)
 
+        elif model_choice == 'Model TensorFlow':
+            st.subheader("Raport klasyfikacji (Sieć neuronowa - TensorFlow)")
+            y_pred_tf = np.round(model_tf.predict(X_test_scaled)).astype(int)
+            classification_rep_tf = classification_report(y_test, y_pred_tf)
+            st.text_area("Raport klasyfikacji", value=classification_rep_tf, height=200)
+
+            st.subheader("Macierz pomyłek (Sieć neuronowa - TensorFlow)")
+            cm_tf = confusion_matrix(y_test, y_pred_tf)
+            st.write(cm_tf)
+
+    else:
+        st.write("Aby wyświetlić metryki, wybierz odpowiednią opcję w ustawieniach")
+
+if section == "Predykcja":
+    st.header("Predykcja anulacji rezerwacji")
+
+    st.subheader("Wprowadź dane do predykcji")
+
+    lead_time = st.number_input("Lead Time", min_value=0)
+    arrival_date_year = st.number_input("Arrival Date Year", min_value=2000, max_value=2023)
+    arrival_date_month = st.selectbox("Arrival Date Month", df_cleaned['arrival_date_month'].unique())
+    arrival_date_week_number = st.number_input("Arrival Date Week Number", min_value=1, max_value=53)
+    arrival_date_day_of_month = st.number_input("Arrival Date Day of Month", min_value=1, max_value=31)
+    stays_in_weekend_nights = st.number_input("Stays in Weekend Nights", min_value=0)
+    stays_in_week_nights = st.number_input("Stays in Week Nights", min_value=0)
+    adults = st.number_input("Adults", min_value=0)
+    children = st.number_input("Children", min_value=0)
+    babies = st.number_input("Babies", min_value=0)
+    meal = st.selectbox("Meal", df_cleaned['meal'].unique())
+    country = st.selectbox("Country", df_cleaned['country'].unique())
+    market_segment = st.selectbox("Market Segment", df_cleaned['market_segment'].unique())
+    distribution_channel = st.selectbox("Distribution Channel", df_cleaned['distribution_channel'].unique())
+    is_repeated_guest = st.number_input("Is Repeated Guest", min_value=0, max_value=1)
+    previous_cancellations = st.number_input("Previous Cancellations", min_value=0)
+    previous_bookings_not_canceled = st.number_input("Previous Bookings Not Canceled", min_value=0)
+    reserved_room_type = st.selectbox("Reserved Room Type", df_cleaned['reserved_room_type'].unique())
+    assigned_room_type = st.selectbox("Assigned Room Type", df_cleaned['assigned_room_type'].unique())
+    booking_changes = st.number_input("Booking Changes", min_value=0)
+    deposit_type = st.selectbox("Deposit Type", df_cleaned['deposit_type'].unique())
+    agent = st.selectbox("Agent", df_cleaned['agent'].unique())
+    company = st.selectbox("Company", df_cleaned['company'].unique())
+    days_in_waiting_list = st.number_input("Days in Waiting List", min_value=0)
+    customer_type = st.selectbox("Customer Type", df_cleaned['customer_type'].unique())
+    adr = st.number_input("ADR", min_value=0.0)
+    required_car_parking_spaces = st.number_input("Required Car Parking Spaces", min_value=0)
+    total_of_special_requests = st.number_input("Total of Special Requests", min_value=0)
+
+    if st.button("Przewidź"):
+        new_data = {
+            'lead_time': [lead_time],
+            'arrival_date_year': [arrival_date_year],
+            'arrival_date_month': [arrival_date_month],
+            'arrival_date_week_number': [arrival_date_week_number],
+            'arrival_date_day_of_month': [arrival_date_day_of_month],
+            'stays_in_weekend_nights': [stays_in_weekend_nights],
+            'stays_in_week_nights': [stays_in_week_nights],
+            'adults': [adults],
+            'children': [children],
+            'babies': [babies],
+            'meal': [meal],
+            'country': [country],
+            'market_segment': [market_segment],
+            'distribution_channel': [distribution_channel],
+            'is_repeated_guest': [is_repeated_guest],
+            'previous_cancellations': [previous_cancellations],
+            'previous_bookings_not_canceled': [previous_bookings_not_canceled],
+            'reserved_room_type': [reserved_room_type],
+            'assigned_room_type': [assigned_room_type],
+            'booking_changes': [booking_changes],
+            'deposit_type': [deposit_type],
+            'agent': [agent],
+            'company': [company],
+            'days_in_waiting_list': [days_in_waiting_list],
+            'customer_type': [customer_type],
+            'adr': [adr],
+            'required_car_parking_spaces': [required_car_parking_spaces],
+            'total_of_special_requests': [total_of_special_requests]
+        }
+
+        new_df = pd.DataFrame(new_data)
+        new_df = pd.get_dummies(new_df, drop_first=True)
+
+        missing_cols = set(X_train.columns) - set(new_df.columns)
+        for col in missing_cols:
+            new_df[col] = 0
+        new_df = new_df[X_train.columns]
+
+        new_df_scaled = scaler.transform(new_df)
+
+        prediction_lr = model_lr.predict(new_df_scaled)
+        probability_lr = model_lr.predict_proba(new_df_scaled)[:, 1]
+
+        prediction_xgb = model_xgb.predict(new_df_scaled)
+        probability_xgb = model_xgb.predict_proba(new_df_scaled)[:, 1]
+
+        prediction_tf = np.round(model_tf.predict(new_df_scaled)).astype(int)
+        probability_tf = model_tf.predict(new_df_scaled).ravel()
+
+        st.subheader("Wyniki predykcji")
+        st.write("**Regresja Logistyczna**")
+        st.write(f"Predykcja: {'Anulowano' if prediction_lr[0] == 1 else 'Nie anulowano'}")
+        st.write(f"Prawdopodobieństwo anulacji: {probability_lr[0]:.4f}")
+
+        st.write("**XGBoost**")
+        st.write(f"Predykcja: {'Anulowano' if prediction_xgb[0] == 1 else 'Nie anulowano'}")
+        st.write(f"Prawdopodobieństwo anulacji: {probability_xgb[0]:.4f}")
+
+        st.write("**Sieć neuronowa TensorFlow**")
+        st.write(f"Predykcja: {'Anulowano' if prediction_tf[0] == 1 else 'Nie anulowano'}")
+        st.write(f"Prawdopodobieństwo anulacji: {probability_tf[0]:.4f}")
