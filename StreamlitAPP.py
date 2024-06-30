@@ -28,7 +28,7 @@ y_test = pd.read_csv('D:/Projektiki/predykcja_rezerwacji/y_test.csv')['is_cancel
 scaler_path = 'D:/Projektiki/predykcja_rezerwacji/scaler.pkl'
 scaler = joblib.load(scaler_path)
 
-# Załaduj wcześniej zapisane modele
+
 lr_model_path = 'D:/Projektiki/predykcja_rezerwacji/logistic_regression_model.pkl'
 xgb_model_path = 'D:/Projektiki/predykcja_rezerwacji/best_model_xgb.pkl'
 nn_model_path = 'D:/Projektiki/predykcja_rezerwacji/tf_model.h5'
@@ -123,7 +123,7 @@ elif section == "Modelowanie":
     models = ['Regresja Logistyczna', 'XGBoost', 'Model TensorFlow']
     accuracies = []
 
-    # Ocena dokładności modeli
+
     y_pred_lr = model_lr.predict(X_test_scaled)
     lr_accuracy = accuracy_score(y_test, y_pred_lr)
     accuracies.append(lr_accuracy)
@@ -138,14 +138,14 @@ elif section == "Modelowanie":
 
     st.write(f"Dokładność modelu TensorFlow: {tf_accuracy:.4f}")
 
-    # Wybór między krzywą ROC a wykresem porównania dokładności modeli
+
     plot_choice = st.radio("Wybierz wykres", ("Krzywa ROC", "Wykres porównania dokładności modeli"))
 
     if plot_choice == "Krzywa ROC":
-        # Wyświetlenie krzywej ROC
+
         st.subheader("Porównanie krzywych ROC")
 
-        # Regresja Logistyczna
+
         y_prob_lr = model_lr.predict_proba(X_test_scaled)[:, 1]
         fpr_lr, tpr_lr, _ = roc_curve(y_test, y_prob_lr)
         roc_auc_lr = auc(fpr_lr, tpr_lr)
@@ -172,7 +172,7 @@ elif section == "Modelowanie":
         st.pyplot(plt)
 
     elif plot_choice == "Wykres porównania dokładności modeli":
-        # Wyświetlenie wykresu porównania dokładności modeli
+
         st.subheader("Wykres porównania dokładności modeli")
 
         plt.figure(figsize=(10, 5))
@@ -183,7 +183,7 @@ elif section == "Modelowanie":
         plt.ylim(0, 1)
         st.pyplot(plt)
 
-    # Wyświetlenie raportu klasyfikacji и матрицы ошибок для выбранной модели
+
     show_metrics = st.checkbox("Wyświetl metryki (Raport klasyfikacji i Macierz pomyłek)")
 
     if show_metrics:
