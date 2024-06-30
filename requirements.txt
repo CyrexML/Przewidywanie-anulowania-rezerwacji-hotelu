@@ -1,6 +1,9 @@
-joblib
+numpy
+scipy
 matplotlib
+seaborn
+pandas
+joblib
 tensorflow
 xgboost
 scikit-learn
-pandas
