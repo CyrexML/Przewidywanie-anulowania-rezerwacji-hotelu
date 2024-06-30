@@ -1,4 +1,6 @@
-joblibtensorflow
+joblib
+matplotlib
+tensorflow
 xgboost
 scikit-learn
 pandas
