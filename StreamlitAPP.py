@@ -9,16 +9,15 @@ from sklearn.preprocessing import StandardScaler
 import joblib
 from tensorflow import keras
 
-
-
-
+# Путь к данным
 data_path_raw = "D:/Projektiki/predykcja_rezerwacji/hotel_booking.csv"
 data_path_cleaned = "D:/Projektiki/predykcja_rezerwacji/hotel_booking1.csv"
 
+# Загрузка данных
 df_raw = pd.read_csv(data_path_raw)
 df_cleaned = pd.read_csv(data_path_cleaned)
 
-
+# Загрузка обучающих и тестовых данных
 X_train = pd.read_csv('D:/Projektiki/predykcja_rezerwacji/X_train.csv')
 X_test = pd.read_csv('D:/Projektiki/predykcja_rezerwacji/X_test.csv')
 X_train_scaled = pd.read_csv('D:/Projektiki/predykcja_rezerwacji/X_train_scaled.csv')
@@ -28,7 +27,7 @@ y_test = pd.read_csv('D:/Projektiki/predykcja_rezerwacji/y_test.csv')['is_cancel
 scaler_path = 'D:/Projektiki/predykcja_rezerwacji/scaler.pkl'
 scaler = joblib.load(scaler_path)
 
-
+# Загрузка моделей
 lr_model_path = 'D:/Projektiki/predykcja_rezerwacji/logistic_regression_model.pkl'
 xgb_model_path = 'D:/Projektiki/predykcja_rezerwacji/best_model_xgb.pkl'
 nn_model_path = 'D:/Projektiki/predykcja_rezerwacji/tf_model.h5'
@@ -37,12 +36,12 @@ model_lr = joblib.load(lr_model_path)
 model_xgb = joblib.load(xgb_model_path)
 model_tf = keras.models.load_model(nn_model_path)
 
-
+# Заголовок приложения
 st.title("Analiza i Predykcja Anulacji Rezerwacji Hotelowych")
 
-
+# Боковая панель навигации
 st.sidebar.header("Ustawienia")
-section = st.sidebar.selectbox("Wybierz sekcję", ["Podstawowe informacje", "EDA", "Predykcja"])
+section = st.sidebar.selectbox("Wybierz sekcję", ["Podstawowe informacje", "EDA", "Modelowanie", "Predykcja"])
 
 if section == "Podstawowe informacje":
     st.header("Podstawowe informacje o zestawie danych")
@@ -56,7 +55,7 @@ if section == "Podstawowe informacje":
 
     st.subheader("Oczyszczony zestaw danych (hotel_booking1)")
     st.write(f"Rozmiar zestawu danych: {df_cleaned.shape[0]} wierszy, {df_cleaned.shape[1]} kolumn")
-    st.write("Przykładowe 5 wierszy zestawu danych:")
+    st.write("Przykładowе 5 wierszy zestawu danych:")
     st.write(df_cleaned.head())
     st.write("Opis danych:")
     st.write(df_cleaned.describe())
@@ -120,31 +119,27 @@ elif section == "EDA":
 elif section == "Modelowanie":
     st.header("Porównanie modeli")
 
-    models = ['Regresja Logistyczna', 'XGBoost', 'Model TensorFlow']
-    accuracies = []
-
-
+    # Обновление метрик моделей
     y_pred_lr = model_lr.predict(X_test_scaled)
     lr_accuracy = accuracy_score(y_test, y_pred_lr)
-    accuracies.append(lr_accuracy)
+    lr_classification_report = classification_report(y_test, y_pred_lr, output_dict=True)
 
     y_pred_xgb = model_xgb.predict(X_test_scaled)
     xgb_accuracy = accuracy_score(y_test, y_pred_xgb)
-    accuracies.append(xgb_accuracy)
+    xgb_classification_report = classification_report(y_test, y_pred_xgb, output_dict=True)
 
+    tf_predictions = model_tf.predict(X_test_scaled)
+    y_pred_tf = (tf_predictions > 0.5).astype("int32")
+    tf_accuracy = accuracy_score(y_test, y_pred_tf)
+    tf_classification_report = classification_report(y_test, y_pred_tf, output_dict=True)
 
-    tf_loss, tf_accuracy = model_tf.evaluate(X_test_scaled, y_test, verbose=0)
-    accuracies.append(tf_accuracy)
-
-    st.write(f"Dokładność modelu TensorFlow: {tf_accuracy:.4f}")
-
+    accuracies = [lr_accuracy, xgb_accuracy, tf_accuracy]
+    models = ['Regresja Logistyczna', 'XGBoost', 'Model TensorFlow']
 
     plot_choice = st.radio("Wybierz wykres", ("Krzywa ROC", "Wykres porównania dokładności modeli"))
 
     if plot_choice == "Krzywa ROC":
-
         st.subheader("Porównanie krzywych ROC")
-
 
         y_prob_lr = model_lr.predict_proba(X_test_scaled)[:, 1]
         fpr_lr, tpr_lr, _ = roc_curve(y_test, y_prob_lr)
@@ -152,14 +147,13 @@ elif section == "Modelowanie":
         plt.figure(figsize=(8, 6))
         plt.plot(fpr_lr, tpr_lr, label=f'Regresja Logistyczna (AUC = {roc_auc_lr:.2f})', color='blue')
 
-
         y_prob_xgb = model_xgb.predict_proba(X_test_scaled)[:, 1]
         fpr_xgb, tpr_xgb, _ = roc_curve(y_test, y_prob_xgb)
         roc_auc_xgb = auc(fpr_xgb, tpr_xgb)
         plt.plot(fpr_xgb, tpr_xgb, label=f'XGBoost (AUC = {roc_auc_xgb:.2f})', color='orange')
 
-
-        y_prob_tf = model_tf.predict_proba(X_test_scaled)[:, 1]  # Используйте predict_proba для получения вероятностей
+        # Исправление для модели TensorFlow
+        y_prob_tf = tf_predictions.ravel()  # Преобразование предсказаний в одномерный массив
         fpr_tf, tpr_tf, _ = roc_curve(y_test, y_prob_tf)
         roc_auc_tf = auc(fpr_tf, tpr_tf)
         plt.plot(fpr_tf, tpr_tf, label=f'Model TensorFlow (AUC = {roc_auc_tf:.2f})', color='green')
@@ -172,7 +166,6 @@ elif section == "Modelowanie":
         st.pyplot(plt)
 
     elif plot_choice == "Wykres porównania dokładności modeli":
-
         st.subheader("Wykres porównania dokładności modeli")
 
         plt.figure(figsize=(10, 5))
@@ -180,45 +173,35 @@ elif section == "Modelowanie":
         plt.xlabel('Model')
         plt.ylabel('Dokładność')
         plt.title('Porównanie modeli')
-        plt.ylim(0, 1)
         st.pyplot(plt)
 
+    # Добавляем выбор модели для вывода метрик
+    model_choice = st.selectbox("Wybierz model do wyświetlenia metryk", models)
 
-    show_metrics = st.checkbox("Wyświetl metryki (Raport klasyfikacji i Macierz pomyłek)")
+    st.subheader(f"Metryki dla {model_choice}")
 
-    if show_metrics:
-        model_choice = st.selectbox("Wybierz model", models)
+    def display_classification_report(report):
+        report_df = pd.DataFrame(report).transpose()
+        st.table(report_df)
 
-        if model_choice == 'Regresja Logistyczna':
-            st.subheader("Raport klasyfikacji (Regresja Logistyczna)")
-            classification_rep_lr = classification_report(y_test, y_pred_lr)
-            st.text_area("Raport klasyfikacji", value=classification_rep_lr, height=200)
+    if model_choice == 'Regresja Logistyczna':
+        st.write("**Dokładność:**", f"{lr_accuracy:.4f}")
+        st.write("**Raport klasyfikacji:**")
+        display_classification_report(lr_classification_report)
 
-            st.subheader("Macierz pomyłek (Regresja Logistyczna)")
-            cm_lr = confusion_matrix(y_test, y_pred_lr)
-            st.write(cm_lr)
+    elif model_choice == 'XGBoost':
+        st.write("**Dokładność:**", f"{xgb_accuracy:.4f}")
+        st.write("**Raport klasyfikacji:**")
+        display_classification_report(xgb_classification_report)
 
-        elif model_choice == 'XGBoost':
-            st.subheader("Raport klasyfikacji (XGBoost)")
-            classification_rep_xgb = classification_report(y_test, y_pred_xgb)
-            st.text_area("Raport klasyfikacji", value=classification_rep_xgb, height=200)
+    elif model_choice == 'Model TensorFlow':
+        st.write("**Dokładność:**", f"{tf_accuracy:.4f}")
+        st.write("**Raport klasyfikacji:**")
+        display_classification_report(tf_classification_report)
 
-            st.subheader("Macierz pomyłek (XGBoost)")
-            cm_xgb = confusion_matrix(y_test, y_pred_xgb)
-            st.write(cm_xgb)
 
-        elif model_choice == 'Model TensorFlow':
-            st.subheader("Raport klasyfikacji (Sieć neuronowa - TensorFlow)")
-            y_pred_tf = np.round(model_tf.predict(X_test_scaled)).astype(int)
-            classification_rep_tf = classification_report(y_test, y_pred_tf)
-            st.text_area("Raport klasyfikacji", value=classification_rep_tf, height=200)
 
-            st.subheader("Macierz pomyłek (Sieć neuronowa - TensorFlow)")
-            cm_tf = confusion_matrix(y_test, y_pred_tf)
-            st.write(cm_tf)
 
-    else:
-        st.write("Aby wyświetlić metryki, wybierz odpowiednią opcję w ustawieniach")
 
 if section == "Predykcja":
     st.header("Predykcja anulacji rezerwacji")
